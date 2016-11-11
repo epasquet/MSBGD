@@ -1,0 +1,129 @@
+package com.sparkProject
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.StandardScaler
+import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit, CrossValidator}
+import org.apache.spark.ml.Pipeline
+
+/**
+  * Created by nux on 25/10/16.
+  */
+object JobML {
+
+  def main(args: Array[String]): Unit = {
+
+    // SparkSession configuration
+    val spark = SparkSession
+      .builder
+      .master("local")
+      .appName("spark session TP_parisTech")
+      .getOrCreate()
+
+    /** ******************************************************************************
+      *
+      * TP 4-5 : Fichier issu de TP-2-3
+      *
+      * *******************************************************************************/
+
+    // ----------------- load fichier ----------------------
+
+    val df = spark
+      .read // returns a DataFrameReader, giving access to methods “option” and “csv”
+      .format("com.databricks.spark.csv")
+      .option("header", "true") // Use first line of all files as header
+      .option("inferSchema", "true") // Automatically infer data types
+      .option("comment", "#") // All lines starting with # are ignored
+      .csv("/home/nux/IdeaProjects/20161010_TP_2-3/tp_spark/koi_cleaned_TP3.csv")
+
+    // ----    Split Data into training, test and validation sets    -----
+
+    // Split the data into training and validation sets (10% held out for testing)
+    val splits = df.randomSplit(Array(0.9, 0.1), seed = 11L)
+    val trainingData = splits(0).cache()
+    val validationData = splits(1).cache()
+
+    // ----------------- assemble features  ----------------------
+
+    // Create vector assembler object with all column names except row_id and koi_disp
+    // 1. Create array of column names (strings)
+    val featureColumns = df.columns.filter(col => !(col.equals("koi_disposition") || col.equals("rowid")))
+    //val featureColumns = Array("koi_period","koi_period_err1","koi_period_err2","koi_time0bk","koi_time0bk_err1","koi_time0bk_err2","koi_time0", "koi_time0_err1")
+
+    // 2. Create vector assembler
+    val assembler =  new VectorAssembler()
+      .setInputCols(featureColumns)
+      .setOutputCol("features")
+    // val assembled = assembler.transform(df)
+
+    // ---------     Normalization of features        ----------
+    /*
+    val scaler = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures")
+      .setWithStd(true)
+      .setWithMean(true)
+    // val scaled = scaler.fit(assembled)
+    // scaled.transform(assembled).printSchema()
+    */
+
+    // ---------     Indexation of label        ----------
+    val indexer = new StringIndexer()
+      .setInputCol("koi_disposition")
+      .setOutputCol("label")
+
+    // ----    Build the training model through a logistic regression   ----
+    val lr = new LogisticRegression()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+      .setStandardization(false)  // we already scaled the data
+      .setFitIntercept(true)  // we want an affine regression (with false, it is a linear regression)
+      .setTol(1.0e-5)  // stop criterion of the algorithm based on its convergence
+      .setMaxIter(300)  // a security stop criterion to avoid infinite loops
+
+    // ----    Define the grid of parameters   ----
+    // We use a ParamGridBuilder to construct a grid of parameters to search over.
+    // With 2 values for regParam and 2 values for ElasticNetParam, which gives
+    // 4 couples of values for CrossValidator to choose from.
+    val x = (-6.0 to -4.0 by 0.5 toArray).map(math.pow(10,_))
+    val xR = x
+    val xE = Array(0.0, 0.1, 0.2, 0.4)
+    val paramGrid = new ParamGridBuilder()
+      .addGrid(lr.regParam, xR)
+      .addGrid(lr.elasticNetParam, xE)
+      .build()
+
+
+    // ----------------------------------------------------------------------------------------//
+    // Données de training et test formatées
+    // Reste à fitter un modèle puis prédire le fichier de prédictions
+    // ----------------------------------------------------------------------------------------//
+
+    // ----    Define the pipeline stages   ----
+    val pipeline = new Pipeline().setStages(Array(assembler, indexer, lr))
+
+    // ----    split, run the training, and runs validation   ----
+
+    // In this case the estimator is the pipeline
+    // A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+    val trainValidationSplit = new TrainValidationSplit()
+      .setEstimator(pipeline)
+      .setEvaluator(new BinaryClassificationEvaluator)
+      .setEstimatorParamMaps(paramGrid)
+      // 70% of the data will be used for training and the remaining 30% for validation.
+      .setTrainRatio(0.7)
+
+    // Run train validation split, and choose the best set of parameters.
+    val model = trainValidationSplit.fit(trainingData)
+
+    // Make predictions on test data. model is the model with combination of parameters
+    // that performed best.
+    val df_WithPredictions = model.transform(validationData)
+      .select("features", "label", "prediction")
+
+    df_WithPredictions.groupBy("label", "prediction").count.show()
+  }
+}
