@@ -1,1 +1,11 @@
-reert
+Pour effectuer le run du projet, dézipper l'archive workspace.
+
+Depuis un terminal, se déplacer dans le dossier workspace puis lancer les commandes:
+Pour traiter le fichier Beer Car Deer de base:
+java -jar MASTERSHAVADOOP.jar input0.txt
+
+Pour un fichier input un peu enrichi:
+java -jar MASTERSHAVADOOP.jar input1.txt
+
+Pour un fichier input plus diversifié:
+java -jar MASTERSHAVADOOP.jar input2.txt
