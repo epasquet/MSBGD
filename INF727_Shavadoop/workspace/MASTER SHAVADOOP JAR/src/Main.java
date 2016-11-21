@@ -105,7 +105,7 @@ public class Main {
 			//////  IF plus de machines que de lignes   //////
 			if (nb_machines >= nb_lignes) {
 				for(int i = 0; i<lines.size(); i++ ){
-					String Sxname = "/cal/homes/epasquet/workspace/S"+i+".txt";
+					String Sxname = "S"+i+".txt";
 						try (PrintWriter out = new PrintWriter(Sxname);){
 							out.println(lines.get(i));
 							out.close();
@@ -126,7 +126,7 @@ public class Main {
 					}
 					ligneRepriseEcriture += nbLignesParFichier;
 
-					String Sx_name = "/cal/homes/epasquet/workspace/S"+f+".txt";
+					String Sx_name = "S"+f+".txt";
 						//try {
 							PrintWriter p = new PrintWriter(Sx_name);
 							p.println(AEcrire);
